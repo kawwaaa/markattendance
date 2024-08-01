@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart';
 import 'dart:convert';
 
 class QRScannerScreen extends StatefulWidget {
@@ -19,6 +20,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
   // Controller for the registration number input
   final TextEditingController _registrationNumberController = TextEditingController();
+
+  // Dummy target location coordinates
+  final double targetLatitude = 6.8257430;
+  final double targetLongitude = 79.8731204;
+  final double allowedRange = 20.0; // in meters
 
   @override
   void reassemble() {
@@ -60,19 +66,19 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    'Barcode Type: ${describeEnum(result!.format)}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Data: ${result!.code}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
+                  // Text(
+                  //   'Barcode Type: ${describeEnum(result!.format)}',
+                  //   style: const TextStyle(
+                  //       fontSize: 16, fontWeight: FontWeight.bold),
+                  // ),
+                  // const SizedBox(height: 10),
+                  // Text(
+                  //   'Data: ${result!.code}',
+                  //   style: const TextStyle(fontSize: 14),
+                  // ),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _markAttendance,
+                    onPressed: _checkLocationAndSubmit,
                     child: const Text('Mark Attendance'),
                   ),
                 ],
@@ -99,90 +105,96 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     });
   }
 
-  Future<void> _markAttendance() async {
-    if (result != null) {
-      String? qrCodeData = result!.code;
-
-      // Send the QR code data to your backend server to mark attendance
-      try {
-        var response = await http.post(
-          Uri.parse('https://9b15d0kz-8000.asse.devtunnels.ms/'),
-          headers: {
-            'Content-Type': 'application/json', // Set the correct content type
-          },
-          body: jsonEncode({
-            'user_id': FirebaseAuth.instance.currentUser?.uid,
-            'qr_code_data': qrCodeData, // Removed quotes for the variable
-          }),
-        );
-
-        if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Attendance marked successfully!'),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to mark attendance with status: ${response.statusCode}'),
-            ),
-          );
-        }
-      } catch (e) {
-        print(e);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to mark attendance'),
-          ),
-        );
-      }
+  /// Function to check location and submit the registration number
+  Future<void> _checkLocationAndSubmit() async {
+    // Extract coordinates from QR code data (e.g., "6.8256791,79.8732179")
+    if (result == null) {
+      _showErrorSnackBar('No QR code scanned!');
+      return;
     }
-  }
 
-  /// Function to test the POST request with a simple message
-  Future<void> _testPostRequest() async {
-    try {
-      // Prepare the request headers and body
-      final headers = {
-        'Content-Type': 'application/json', // Ensure JSON content type
-      };
+    String? qrCodeData = result!.code;
+    List<String> coordinates = qrCodeData!.split(',');
 
-      final body = jsonEncode({
-        'message': 'yooo', // The text you want to send
-      });
+    if (coordinates.length != 2) {
+      _showErrorSnackBar('Invalid QR code format!');
+      return;
+    }
 
-      // Send the POST request
-      var response = await http.post(
-        Uri.parse('https://9b15d0kz-8000.asse.devtunnels.ms/'),
-        headers: headers,
-        body: body,
-      );
+    double scannedLatitude = double.tryParse(coordinates[0].trim()) ?? targetLatitude;
+    double scannedLongitude = double.tryParse(coordinates[1].trim()) ?? targetLongitude;
 
-      // Check if the response is successful
-      if (response.statusCode == 200) {
-        var responseBody = response.body;
-        print('Response body: $responseBody');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('POST request successful: $responseBody'),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('POST request failed with status: ${response.statusCode}'),
-          ),
-        );
-      }
-    } catch (e) {
-      print(e);
+    // Use the utility function to check if within range
+    bool isInRange = await _isWithinRange(scannedLatitude, scannedLongitude, allowedRange);
+
+    if (isInRange) {
+      // Show registration form if within range
+      _showRegistrationForm();
+    } else {
+      // Show an error message if not within range
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Failed to send POST request'),
+          content: Text('You are not within the required range.'),
         ),
       );
     }
+  }
+
+  /// Check if the device is within the specified range of the target location
+  Future<bool> _isWithinRange(double targetLat, double targetLng, double rangeInMeters) async {
+    try {
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
+
+        _showErrorSnackBar('Location services are disabled.');
+        return false;
+      }
+      print("Location enabled");
+
+      // Check for location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showErrorSnackBar('Location permissions are denied.');
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showErrorSnackBar('Location permissions are permanently denied.');
+        return false;
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      print("Position recived: ");
+
+      // Calculate distance between current position and target location
+      double distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        targetLat,
+        targetLng,
+      );
+
+      // Check if the distance is within the specified range
+      return distance <= rangeInMeters;
+    } catch (e) {
+      _showErrorSnackBar('Error checking location: $e');
+      return false;
+    }
+  }
+
+  /// Show error message in a snack bar
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+      ),
+    );
   }
 
   /// Show the form to input registration number
@@ -226,7 +238,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           },
           body: jsonEncode({
             'registration_number': registrationNumber, // Send registration number
-            // 'message': 'yooo', // Additional message if needed
           }),
         );
 
