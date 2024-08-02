@@ -73,8 +73,11 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Data: ${result!.code}',
-                    style: const TextStyle(fontSize: 14),
+                    "QR Detected",
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold
+                    ),
+
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
@@ -83,12 +86,16 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ),
                 ],
               )
-                  : ElevatedButton(
-                onPressed: _showRegistrationForm, // Call the form function
-                child: const Text("Enter Registration Number"),
+                  : Text("QR not found",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20
+                ),
+
+              ),
               ),
             ),
-          ),
+
         ],
       ),
     );
@@ -224,7 +231,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog
+
+                setState(() {
+                  result=null;
+                });
+                Navigator.of(context).pop();
+                // Close the dialog
                 _submitRegistrationNumber(); // Submit the form
               },
               child: const Text('Submit'),
