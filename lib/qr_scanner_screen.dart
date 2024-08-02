@@ -24,7 +24,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   // Dummy target location coordinates
   final double targetLatitude = 6.8257430;
   final double targetLongitude = 79.8731204;
-  final double allowedRange = 20.0; // in meters
+  final double allowedRange = 200.0; // in meters
 
   @override
   void reassemble() {
@@ -66,16 +66,16 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Text(
-                  //   'Barcode Type: ${describeEnum(result!.format)}',
-                  //   style: const TextStyle(
-                  //       fontSize: 16, fontWeight: FontWeight.bold),
-                  // ),
-                  // const SizedBox(height: 10),
-                  // Text(
-                  //   'Data: ${result!.code}',
-                  //   style: const TextStyle(fontSize: 14),
-                  // ),
+                  Text(
+                    'Barcode Type: ${describeEnum(result!.format)}',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Data: ${result!.code}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: _checkLocationAndSubmit,
@@ -99,7 +99,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       this.controller = controller;
     });
     controller.scannedDataStream.listen((scanData) {
+      print("xxx");
       setState(() {
+        print("Setting new data");
         result = scanData;
       });
     });
@@ -112,6 +114,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       _showErrorSnackBar('No QR code scanned!');
       return;
     }
+    print({"result":result!.code});
 
     String? qrCodeData = result!.code;
     List<String> coordinates = qrCodeData!.split(',');
@@ -124,9 +127,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     double scannedLatitude = double.tryParse(coordinates[0].trim()) ?? targetLatitude;
     double scannedLongitude = double.tryParse(coordinates[1].trim()) ?? targetLongitude;
 
+    print({"***la":scannedLatitude});
+    print({"***lo":scannedLongitude});
+
     // Use the utility function to check if within range
     bool isInRange = await _isWithinRange(scannedLatitude, scannedLongitude, allowedRange);
-
+    print({"isw":isInRange});
     if (isInRange) {
       // Show registration form if within range
       _showRegistrationForm();
@@ -172,6 +178,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       print("Position recived: ");
 
+      print({"posl*":position.latitude});
+      print({"poslo*":position.longitude});
       // Calculate distance between current position and target location
       double distance = Geolocator.distanceBetween(
         position.latitude,
@@ -179,6 +187,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         targetLat,
         targetLng,
       );
+      print({"Dis":distance});
+      print({"Rng":rangeInMeters});
 
       // Check if the distance is within the specified range
       return distance <= rangeInMeters;
@@ -231,16 +241,17 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
     if (registrationNumber.isNotEmpty) {
       try {
+        print({"Sub"});
         var response = await http.post(
-          Uri.parse('https://9b15d0kz-8000.asse.devtunnels.ms'),
+          Uri.parse('https://9b15d0kz-8000.asse.devtunnels.ms/'),
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json; charset=UTF-8',
           },
           body: jsonEncode({
             'registration_number': registrationNumber, // Send registration number
           }),
-        );
 
+        );
         if (response.statusCode == 200) {
           var responseBody = response.body;
           print('Response body: $responseBody');
@@ -254,12 +265,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           print('Response body: ${response.body}'); // Log the server's response body for debugging
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to submit registration with status: ${response.statusCode}'),
+              content: Text('Failed to submit registration with status:;: ${response.statusCode}'),
             ),
           );
         }
       } catch (e) {
-        print('Error: $e');
+        print('EError: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to submit registration'),
